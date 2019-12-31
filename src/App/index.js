@@ -1,150 +1,91 @@
-import React, { useReducer, useEffect, useCallback, useRef } from "react";
-import Editor from "./../Components/Editor/Editor";
-import Problem from "./../Components/Problem/problem";
-import CodeError from "./../Components/CodeError/CodeError";
-import TestResults from "./../Components/TestResults/TestResults";
-import { fetchProblem } from "./../helpers";
-import { transpileCode, generateScriptTag } from "./helpers";
-import "./App.scss";
+import React, { useEffect, useState } from "react";
+import { Route, BrowserRouter as Router, Redirect } from "react-router-dom";
+import Rules from "../Components/Rules/Rules";
+import Challenge from "../Pages/Challenge/Challenge";
+import withFirebase from "../hooks/withFirebase";
+import SidePanel from "../Components/SidePanel/SidePanel";
+import RootLayout from "../Components/Layouts/Root";
+import ChildLayout from "../Components/Layouts/Child";
+import Loader from "../Components/Common/Loader/Loader";
+import { Store } from "../store";
+import Submission from "../Pages/Submission/Submission";
+// import { useBeforeunload } from "react-beforeunload";
 
-const appReducer = (state, action) => {
-  switch (action.type) {
-    case "DISABLE_LOADER":
-      return { ...state, loading: false };
-    case "STORE_DATA":
-      return { ...state, data: action.payload };
-    case "STORE_CODE":
-      return { ...state, code: action.payload };
-    case "SHOW_RESULTS":
-      return { ...state, results: action.payload };
-    case "SHOW_ERRORS":
-      return { ...state, error: action.payload };
-    default:
-      throw new Error();
-  }
-};
-
-const App = () => {
-  const initialState = {
-    loading: true,
-    data: {},
-    code: "",
-    error: undefined,
-    results: undefined
-  };
-  const iframeRef = useRef();
-
-  const [state, dispatch] = useReducer(appReducer, initialState);
-  const renderLoader = () => {
-    return <div className="loading">loading ...</div>;
-  };
-
-  const renderCodeError = () => {
-    return <CodeError error={state.error} />;
-  };
-
-  const renderTestResults = () => {
-    return <TestResults results={state.results} />;
-  };
-
-  const onEditorChange = code => {
-    dispatch({ type: "SHOW_ERRORS", payload: undefined });
-    dispatch({ type: "SHOW_RESULTS", payload: undefined });
-    dispatch({ type: "STORE_CODE", payload: code });
-  };
-
-  const handleClick = () => {
-    let transpiledCode;
-    try {
-      transpiledCode = transpileCode(state.code);
-    } catch ({ stack }) {
-      dispatch({
-        type: "SHOW_ERRORS",
-        payload: stack.substring(0, stack.indexOf("at Parser."))
-      });
-      return;
-    }
-    const scriptTag = generateScriptTag(
-      transpiledCode,
-      state.data.assertations,
-      state.data.functionName
-    );
-
-    iframeRef.current.srcdoc = scriptTag;
-  };
-
-  const loadData = useCallback(async () => {
-    const data = await fetchProblem(1);
-    dispatch({ type: "STORE_DATA", payload: data });
-    dispatch({ type: "STORE_CODE", payload: data.defination });
-    dispatch({ type: "DISABLE_LOADER" });
-  }, []);
+const App = ({ firebase }) => {
+  // useBeforeunload(event => event.preventDefault());
+  const [isAuthenticated, setAuthenticated] = useState(false);
+  const [isLoading, setLoadingStatus] = useState(true);
 
   useEffect(() => {
-    loadData();
-    window.addEventListener("message", e => {
-      if (e.data.type === "RUN_TIME_ERROR") {
-        dispatch({ type: "SHOW_ERRORS", payload: e.data.response });
-      }
-      if (e.data.type === "TEST_RESULTS") {
-        dispatch({ type: "SHOW_RESULTS", payload: e.data.response });
-      }
+    firebase.auth().onAuthStateChanged(user => {
+      setAuthenticated(!!user);
+      setLoadingStatus(false);
     });
-  }, [loadData]);
+  }, [firebase]);
+
+  if (isLoading) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
-    <div className="container">
-      {state.loading ? (
-        renderLoader()
-      ) : (
-        <div className="container">
-          <header className="header">
-            <h1> TW TECH1</h1>
-            <div className="timer">1:00:00</div>
-            <div className="menu"><a className="menu-logout">Logout</a></div>
-            </header>
-          <main>
-            <section class="instruction">Instructions:</section>
-            <ul className="puzzle-list">
-            <li className="puzzle-list-item">
-              <header className="puzzle-header"><b>Question1:</b> <button className="button-run" onClick={handleClick}> Run</button></header>
-              <section class="puzzle-question">
-                <Problem content={state.data.problemStatment} />
-              </section>
-              <section class="puzzle-editor">
-                <Editor
-                  onEditorChange={onEditorChange}
-                  initialDefination={state.data.defination}
-                />
-                {state.error && renderCodeError()}
-                {state.results && renderTestResults()}
-              </section>
-            </li>
-            <li className="puzzle-list-item">
-              <header className="puzzle-header"><b>Question1:</b> <button className="button-run" onClick={handleClick}> Run</button></header>
-              <section class="puzzle-question">
-                <Problem content={state.data.problemStatment} />
-              </section>
-              <section class="puzzle-editor">
-                <Editor
-                  onEditorChange={onEditorChange}
-                  initialDefination={state.data.defination}
-                />
-                {state.error && renderCodeError()}
-                {state.results && renderTestResults()}
-              </section>
-            </li>
-            </ul>
-            <iframe title="code iframe" ref={iframeRef}></iframe>
-          </main>
-          <footer>
-            <button className="button-save">Save</button>
-            <button className="button-submit">Submit</button>
-          </footer>
-        </div>
-      )}
-    </div>
+    <Store.Container>
+      <RootLayout>
+        <Router>
+          <Route
+            exact
+            path="/coditor"
+            render={() => {
+              const leftComponent = () => {
+                if (isAuthenticated) {
+                  return (
+                    <SidePanel.WelcomeView user={firebase.auth().currentUser} />
+                  );
+                } else {
+                  return <SidePanel.GuestView />;
+                }
+              };
+              const rightComponent = () => <Rules />;
+              const content = {
+                leftComponent: leftComponent,
+                rightComponent: rightComponent
+              };
+              return <ChildLayout content={content} />;
+            }}
+          />
+          <Route
+            exact
+            path="/coditor/challenge/:challengeID"
+            render={() => {
+              const leftComponent = () => {
+                return (
+                  <SidePanel.ProblemsListView
+                    user={firebase.auth().currentUser}
+                  />
+                );
+              };
+              const rightComponent = () => {
+                if (isAuthenticated) return <Challenge />;
+                return <Redirect to={{ pathname: "/coditor" }} />;
+              };
+              const content = {
+                leftComponent: leftComponent,
+                rightComponent: rightComponent
+              };
+              return <ChildLayout content={content} />;
+            }}
+          />
+          <Route
+            exact
+            path="/coditor/submission"
+            render={() => <Submission />}
+          />
+        </Router>
+      </RootLayout>
+    </Store.Container>
   );
 };
-
-export default App;
+export default withFirebase(App);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Controlled as CodeMirror } from "react-codemirror2";
 import PropTypes from "prop-types";
 require("codemirror/mode/xml/xml.js");
@@ -14,13 +14,17 @@ const getOptions = ({ theme, mode }) => {
 
 const Editor = props => {
   const { theme, mode, onEditorChange, initialDefination } = props;
-  
+
   const options = getOptions({ theme, mode });
 
   require(`codemirror/theme/${theme}.css`);
   require(`codemirror/mode/${mode}/${mode}.js`);
 
-  const [code, setCode] = useState(initialDefination);
+  const [code, setCode] = useState(null);
+
+  useEffect(() => {
+    setCode(initialDefination);
+  }, [initialDefination]);
 
   const handleBeforeChange = value => {
     setCode(value);
@@ -28,7 +32,7 @@ const Editor = props => {
   };
 
   return (
-    <div className="editor">
+    <div className="editor w-full">
       <CodeMirror
         value={code}
         options={options}
@@ -41,7 +45,7 @@ const Editor = props => {
 };
 
 Editor.defaultProps = {
-  theme: "monokai",
+  theme: "neo",
   mode: "javascript"
 };
 
